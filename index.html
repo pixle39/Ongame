@@ -1,0 +1,64 @@
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const csrf = require('csurf');
+const session = require('express-session');
+const Razorpay = require('razorpay');
+const socketIO = require('socket.io');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI, { 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true 
+})
+.then(() => console.log('MongoDB Connected'))
+.catch(err => console.error(err));
+
+// Middleware
+app.use(helmet());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: true }));
+
+// Rate limiting (100 req/15min per IP)
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+
+// CSRF protection
+app.use(csrf({ cookie: true }));
+
+// Razorpay payment gateway
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
+
+// Routes
+app.use('/auth', require('./routes/auth'));
+app.use('/payments', require('./routes/payments'));
+app.use('/games', require('./routes/games'));
+
+// Age verification middleware
+function verifyAge(req, res, next) {
+  if (req.session.ageVerified) return next();
+  res.redirect('/age-verification');
+}
+
+// Start server
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Socket.io for real-time gameplay
+const io = socketIO(server);
+io.on('connection', (socket) => {
+  console.log('New player connected');
+  socket.on('joinGame', (gameId) => {
+    socket.join(gameId);
+    // Game logic here
+  });
+});
