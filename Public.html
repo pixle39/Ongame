@@ -1,0 +1,13 @@
+const socket = io();
+
+socket.on('connect', () => {
+  console.log('Connected to game server');
+});
+
+function joinGame(gameId) {
+  socket.emit('joinGame', gameId);
+}
+
+socket.on('gameUpdate', (data) => {
+  // Update game UI in real-time
+});
